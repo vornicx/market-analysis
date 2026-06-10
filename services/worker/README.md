@@ -31,6 +31,30 @@ Everything except secrets lives in the database (`monitor_configs`,
 one `worker_poll_floor_seconds` interval without a restart. `dry_run` defaults
 to true: nothing reaches Telegram until you flip it off deliberately.
 
+## Detectors (all live)
+
+| # | Module | Signal | Max points |
+|---|---|---|---|
+| D1 | `price_move` | unusual single-interval move | +25 |
+| D2 | `divergence` | cross-book outlier vs consensus | +15 |
+| D3 | `drift` | sustained directional movement | +20 |
+| D4 | `sharp_leader` | sharp book leads, retail follows | +30 |
+| D5 | `persistence_amp` | rapid move that held next poll | +15 |
+| D6 | `reversal` | suppressor: retraced/fake move | −20 |
+| D7 | `rarity` | move size vs trailing baseline | +15 |
+
+Score = clamp(sum, 0, 100). Bands: high ≥ 80, medium ≥ 60, low < 60. A segment's
+`min_alert_score` gates alerting; thresholds live per segment in
+`monitor_segments.thresholds`.
+
+## Tests
+
+```powershell
+pip install -e ".[dev]"
+pytest -q          # 46 tests, no network/DB needed
+ruff check worker tests
+```
+
 ## Adding a detector
 
 1. Create `worker/detectors/your_detector.py` implementing the `Detector` protocol.

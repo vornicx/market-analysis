@@ -47,6 +47,22 @@ Telegram + dashboard.
 - `global_pause` — worker idles (still heartbeats).
 - `dry_run` — full pipeline, no Telegram sends.
 
+## What's implemented
+
+- **7 deterministic detectors** (price move, cross-book divergence, sustained
+  drift, sharp-leader, persistence, reversal suppressor, rarity) with per-segment
+  thresholds — 46 unit tests, no network needed (`services/worker`: `pytest -q`).
+- **Anti-spam**: dedupe keys, suppression windows, per-event daily cap,
+  per-cycle cap, band-upgrade escalation (the only suppression bypass).
+- **Optional LLM annotation** (Claude Haiku, strict JSON schema, 6s timeout,
+  never blocks delivery) behind `llm_enabled` + `llm_min_band`.
+- **Zero-credit replay**: queue a re-run of detectors over stored snapshots
+  from any alert page to tune thresholds.
+- **Ops**: budget governor with daily Telegram notice, worker heartbeat,
+  Vercel cron watchdog (`/api/cron/watchdog`, see `apps/web/vercel.json`),
+  audit log on every config change, realtime alert feed in the dashboard.
+- **CI**: GitHub Actions runs ruff + pytest + Next.js typecheck on every push.
+
 ## Budget
 
 The Odds API free tier ≈ 500 credits/month; one poll costs `markets × regions`

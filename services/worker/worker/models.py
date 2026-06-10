@@ -20,6 +20,10 @@ class GlobalConfig(BaseModel):
     odds_api_region: str
     worker_poll_floor_seconds: int
     alert_suppression_minutes: int
+    # v2 knobs — defaults keep older databases working before 0002 is applied
+    max_alerts_per_cycle: int = 8
+    max_alerts_per_event_per_day: int = 5
+    llm_min_band: str = "medium"
 
 
 class Segment(BaseModel):

@@ -35,21 +35,49 @@ def format_alert_message(
     reason: str,
     kickoff: datetime,
     alert_id: str,
+    escalation: bool = False,
+    llm_line: str | None = None,
+    detector_results: list | None = None,
+    consensus_series: list[tuple[datetime, float]] | None = None,
 ) -> str:
+    """Compact format by default; high-band alerts get the expanded evidence block."""
     emoji = "🏆" if segment_key == "world_cup" else "⚽"
     now = datetime.now(timezone.utc)
     ko_delta = kickoff - now
     hours, rem = divmod(max(int(ko_delta.total_seconds()), 0), 3600)
-    link = f"\n🔗 {settings.app_base_url}/alerts/{alert_id}" if settings.app_base_url else ""
-    return (
+
+    lines = []
+    if escalation:
+        lines.append("⬆ <b>ESCALATION</b>")
+    lines.append(
         f"{emoji} <b>{escape(display_label)}</b> · {escape(alert_type)} · "
-        f"<b>{score}/100</b> ({band.upper()})\n"
-        f"{escape(home_team)} vs {escape(away_team)} — {escape(competition)}\n"
-        f"{escape(market_key)} · {escape(selection)}\n"
-        f"{escape(reason)}\n"
-        f"🕑 {now.strftime('%Y-%m-%d %H:%M')} UTC · ko in {hours}h {rem // 60}m"
-        f"{link}"
+        f"<b>{score}/100</b> ({band.upper()})"
     )
+    lines.append(f"{escape(home_team)} vs {escape(away_team)} — {escape(competition)}")
+    lines.append(f"{escape(market_key)} · {escape(selection)}")
+    lines.append(escape(reason))
+
+    # Expanded evidence block for high-confidence alerts.
+    if consensus_series and len(consensus_series) >= 2:
+        path = " → ".join(f"{p:.3f}" for _, p in consensus_series[-5:])
+        lines.append(f"📈 consensus p: {escape(path)}")
+    if detector_results:
+        fired = [r for r in detector_results if r.fired]
+        breakdown = " ".join(f"{r.detector}({r.points:+.0f})" for r in fired)
+        lines.append(f"🧮 {escape(breakdown)}")
+
+    if llm_line:
+        lines.append(f"🤖 LLM (advisory): {escape(llm_line)}")
+
+    lines.append(f"🕑 {now.strftime('%Y-%m-%d %H:%M')} UTC · ko in {hours}h {rem // 60}m")
+    if settings.app_base_url:
+        lines.append(f"🔗 {settings.app_base_url}/alerts/{alert_id}")
+    return "\n".join(lines)
+
+
+def send_notice(chat_id: str, text: str) -> None:
+    """One-off operational notice (budget exhausted, worker events). Best-effort."""
+    send_message(chat_id, f"ℹ️ {escape(text)}")
 
 
 def send_message(chat_id: str, text: str) -> tuple[int | None, str | None]:

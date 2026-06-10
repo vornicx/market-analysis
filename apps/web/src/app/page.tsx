@@ -1,59 +1,117 @@
+import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
   const supabase = await createSupabaseServer();
+  const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const midnight = new Date();
+  midnight.setUTCHours(0, 0, 0, 0);
 
-  const [{ data: config }, { data: lastRun }, { count: alerts24h }] = await Promise.all([
-    supabase.from("monitor_configs").select("*").eq("id", 1).single(),
-    supabase.from("worker_runs").select("*").order("started_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase
-      .from("alerts")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString()),
-  ]);
+  const [{ data: config }, { data: runs }, { count: alerts24h }, { data: latest }] =
+    await Promise.all([
+      supabase.from("monitor_configs").select("*").eq("id", 1).single(),
+      supabase
+        .from("worker_runs")
+        .select("started_at, credits_used")
+        .gte("started_at", midnight.toISOString())
+        .order("started_at", { ascending: false }),
+      supabase
+        .from("alerts")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", since24h),
+      supabase
+        .from("alerts")
+        .select("id, created_at, segment_key, alert_type, alert_score, confidence_band, events(home_team, away_team)")
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+  const lastRun = runs?.[0];
+  const creditsToday = (runs ?? []).reduce((sum, r) => sum + (r.credits_used ?? 0), 0);
+  const heartbeatMin = lastRun
+    ? Math.round((Date.now() - new Date(lastRun.started_at).getTime()) / 60000)
+    : null;
 
   const mode = !config
     ? "UNKNOWN"
     : config.global_pause
       ? "PAUSED"
       : config.world_cup_only_mode
-        ? "WORLD CUP ONLY"
+        ? "🏆 WORLD CUP ONLY"
         : "NORMAL";
 
   return (
     <div>
       <h1>Overview</h1>
       {config?.dry_run && (
-        <div style={{ background: "#5c4400", padding: 12, borderRadius: 6, marginBottom: 16 }}>
+        <div className="banner warn">
           ⚠ DRY RUN — alerts are computed and stored but NOT sent to Telegram.
         </div>
       )}
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <StatCard label="Mode" value={mode} />
-        <StatCard label="Alerts (24h)" value={String(alerts24h ?? 0)} />
-        <StatCard
-          label="Worker last seen"
-          value={lastRun ? new Date(lastRun.started_at).toLocaleString() : "never"}
+      {config?.global_pause && (
+        <div className="banner danger">⏸ GLOBAL PAUSE — worker is idling.</div>
+      )}
+      {config?.world_cup_only_mode && !config?.world_cup_enabled && (
+        <div className="banner danger">
+          ⚠ Misconfiguration: world_cup_only_mode is ON but world_cup_enabled is OFF —
+          nothing is being monitored.
+        </div>
+      )}
+
+      <div className="statgrid">
+        <Stat label="Mode" value={mode} />
+        <Stat label="Alerts (24h)" value={String(alerts24h ?? 0)} />
+        <Stat
+          label="Worker heartbeat"
+          value={heartbeatMin === null ? "never" : `${heartbeatMin} min ago`}
+          tone={heartbeatMin === null || heartbeatMin > 30 ? "danger" : "ok"}
         />
-        <StatCard
-          label="Football / World Cup"
-          value={`${config?.football_enabled ? "ON" : "off"} / ${config?.world_cup_enabled ? "ON" : "off"}`}
+        <Stat
+          label="Credits today"
+          value={`${creditsToday} / ${config?.daily_credit_cap ?? "?"}`}
+          tone={config && creditsToday >= config.daily_credit_cap ? "danger" : undefined}
         />
       </div>
-      <p style={{ marginTop: 24, color: "#888" }}>
-        Latest alerts appear on the <a href="/alerts" style={{ color: "#9ecbff" }}>Alerts</a> page.
-      </p>
+
+      <h2>Latest alerts</h2>
+      {!latest?.length ? (
+        <p className="muted">No alerts yet.</p>
+      ) : (
+        <table className="data">
+          <thead>
+            <tr><th>Time</th><th>Seg</th><th>Match</th><th>Type</th><th>Score</th></tr>
+          </thead>
+          <tbody>
+            {latest.map((a) => (
+              <tr key={a.id}>
+                <td className="muted">{new Date(a.created_at).toLocaleString()}</td>
+                <td>{a.segment_key === "world_cup" ? "🏆" : "⚽"}</td>
+                <td>
+                  <Link href={`/alerts/${a.id}`}>
+                    {(a.events as { home_team?: string })?.home_team} vs{" "}
+                    {(a.events as { away_team?: string })?.away_team}
+                  </Link>
+                </td>
+                <td>{a.alert_type}</td>
+                <td><span className={`pill ${a.confidence_band}`}>{a.alert_score}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div style={{ border: "1px solid #2a2d34", borderRadius: 8, padding: 16, minWidth: 180 }}>
-      <div style={{ color: "#888", fontSize: 13 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>{value}</div>
+    <div className="card">
+      <div className="label">{label}</div>
+      <div className="value" style={tone ? { color: `var(--${tone})` } : undefined}>
+        {value}
+      </div>
     </div>
   );
 }

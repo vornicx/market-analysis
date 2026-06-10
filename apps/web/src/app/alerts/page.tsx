@@ -1,20 +1,15 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { RealtimeAlerts } from "@/components/RealtimeAlerts";
 
 export const dynamic = "force-dynamic";
-
-const BAND_COLORS: Record<string, string> = {
-  high: "#ff7b7b",
-  medium: "#ffc66d",
-  low: "#9ecbff",
-};
 
 export default async function AlertsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ segment?: string }>;
+  searchParams: Promise<{ segment?: string; band?: string }>;
 }) {
-  const { segment } = await searchParams;
+  const { segment, band } = await searchParams;
   const supabase = await createSupabaseServer();
 
   let query = supabase
@@ -23,43 +18,47 @@ export default async function AlertsPage({
     .order("created_at", { ascending: false })
     .limit(50);
   if (segment) query = query.eq("segment_key", segment);
+  if (band) query = query.eq("confidence_band", band);
   const { data: alerts } = await query;
 
   return (
     <div>
       <h1>Alerts</h1>
-      <div style={{ marginBottom: 12 }}>
-        <Link href="/alerts" style={{ marginRight: 8, color: "#9ecbff" }}>All</Link>
-        <Link href="/alerts?segment=general_football" style={{ marginRight: 8, color: "#9ecbff" }}>⚽ General</Link>
-        <Link href="/alerts?segment=world_cup" style={{ color: "#9ecbff" }}>🏆 World Cup</Link>
+      <RealtimeAlerts />
+      <div style={{ marginBottom: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <Link href="/alerts">All</Link>
+        <Link href="/alerts?segment=general_football">⚽ General</Link>
+        <Link href="/alerts?segment=world_cup">🏆 World Cup</Link>
+        <span className="muted">|</span>
+        <Link href="/alerts?band=high">High only</Link>
+        <Link href="/alerts?band=medium">Medium only</Link>
       </div>
       {!alerts?.length ? (
-        <p style={{ color: "#888" }}>
-          No alerts yet. Check worker status if you expected activity.
-        </p>
+        <p className="muted">No alerts match — lower filters or check worker status.</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <table className="data">
           <thead>
-            <tr style={{ textAlign: "left", color: "#888" }}>
-              <th>Time</th><th>Segment</th><th>Match</th><th>Market</th>
-              <th>Type</th><th>Score</th><th>Band</th><th>Status</th>
+            <tr>
+              <th>Time</th><th>Seg</th><th>Match</th><th>Market</th>
+              <th>Type</th><th>Score</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
             {alerts.map((a) => (
-              <tr key={a.id} style={{ borderTop: "1px solid #2a2d34" }}>
-                <td>{new Date(a.created_at).toLocaleString()}</td>
-                <td>{a.segment_key === "world_cup" ? "🏆 WC" : "⚽ GEN"}</td>
+              <tr key={a.id}>
+                <td className="muted">{new Date(a.created_at).toLocaleString()}</td>
+                <td>{a.segment_key === "world_cup" ? "🏆" : "⚽"}</td>
                 <td>
-                  <Link href={`/alerts/${a.id}`} style={{ color: "#9ecbff" }}>
+                  <Link href={`/alerts/${a.id}`}>
                     {a.events?.home_team} vs {a.events?.away_team}
                   </Link>
                 </td>
                 <td>{a.market_key}</td>
                 <td>{a.alert_type}</td>
-                <td style={{ fontWeight: 700 }}>{a.alert_score}</td>
-                <td style={{ color: BAND_COLORS[a.confidence_band] }}>{a.confidence_band}</td>
-                <td>{a.status}</td>
+                <td>
+                  <span className={`pill ${a.confidence_band}`}>{a.alert_score}</span>
+                </td>
+                <td className="muted">{a.status}</td>
               </tr>
             ))}
           </tbody>

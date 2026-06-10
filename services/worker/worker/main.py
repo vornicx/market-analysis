@@ -11,7 +11,17 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from . import alerting, config as config_mod, features, normalize, persistence, scheduler, scoring
+from . import (
+    alerting,
+    config as config_mod,
+    features,
+    normalize,
+    persistence,
+    replay,
+    scheduler,
+    scoring,
+    telegram,
+)
 from .detectors import REGISTRY
 from .odds_client import OddsApiClient
 
@@ -24,6 +34,24 @@ log = logging.getLogger("worker")
 shutdown = threading.Event()
 _last_polled: dict[str, datetime] = {}  # segment_key -> last poll time (process memory)
 _last_event_refresh: datetime | None = None
+_budget_notice_date: str | None = None  # UTC date we last sent BUDGET_EXHAUSTED
+
+
+def _notify_budget_exhausted_once(cfg, active_segments, used_today: int) -> None:
+    """One Telegram notice per UTC day when the daily credit cap is hit."""
+    global _budget_notice_date
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _budget_notice_date == today or cfg.dry_run:
+        return
+    _budget_notice_date = today
+    for seg in active_segments:
+        if seg.telegram_chat_id:
+            telegram.send_notice(
+                seg.telegram_chat_id,
+                f"BUDGET_EXHAUSTED: daily Odds API cap reached "
+                f"({used_today}/{cfg.daily_credit_cap} credits). "
+                f"Polling resumes at 00:00 UTC.",
+            )
 
 
 def _handle_sigterm(signum: int, frame: object) -> None:
@@ -92,7 +120,9 @@ def poll_segment(db, odds, cfg, seg) -> tuple[int, int, int]:
         results = [d.detect(ctx) for d in REGISTRY]
         scored = scoring.assemble(results, ctx)
         if scored and scored.score >= seg.min_alert_score:
-            if alerting.create_and_deliver(db, cfg, seg, ctx, scored):
+            if alerting.create_and_deliver(
+                db, cfg, seg, ctx, scored, cycle_alerts_sent=alerts_created
+            ):
                 alerts_created += 1
 
     _last_polled[seg.segment_key] = datetime.now(timezone.utc)
@@ -117,6 +147,7 @@ def run() -> None:
             continue
 
         refresh_events(db, odds, active)
+        replay.process_pending(db, all_segments)  # zero-credit threshold tuning
 
         used_today = persistence.credits_used_today(db)
         due = [
@@ -127,6 +158,7 @@ def run() -> None:
         if not due or used_today >= cfg.daily_credit_cap:
             if due and used_today >= cfg.daily_credit_cap:
                 log.warning("daily credit cap reached (%d) — polling paused", used_today)
+                _notify_budget_exhausted_once(cfg, active, used_today)
             run_id = persistence.start_run(db, "idle", [s.segment_key for s in due])
             persistence.finish_run(db, run_id, "ok")
             shutdown.wait(cfg.worker_poll_floor_seconds)

@@ -7,7 +7,8 @@ en orden:
 ## 1. Supabase (~10 min)
 
 1. Crea un proyecto en [supabase.com](https://supabase.com) (plan free vale).
-2. SQL Editor → pega y ejecuta el contenido completo de `infra/sql/0001_init.sql`.
+2. SQL Editor → pega y ejecuta el contenido completo de `infra/sql/0001_init.sql`,
+   y después `infra/sql/0002_hardening.sql` (anti-spam, replay, realtime).
 3. Authentication → Users → "Add user" → crea tu usuario con email+password
    (el trigger lo da de alta como admin automáticamente).
 4. Settings → API → copia estos 3 valores:

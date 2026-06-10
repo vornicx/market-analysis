@@ -1,5 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import { AlertActions } from "@/components/AlertActions";
+import { EvidenceView } from "@/components/EvidenceView";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,7 @@ export default async function AlertDetailPage({
   const { data: alert } = await supabase
     .from("alerts")
     .select(
-      "*, events(home_team, away_team, commence_time), alert_evidence(payload), llm_analyses(*), telegram_deliveries(*), alert_feedback(*)"
+      "*, events(home_team, away_team, commence_time), alert_evidence(payload), llm_analyses(*), telegram_deliveries(*), alert_feedback(verdict, note, created_at)"
     )
     .eq("id", id)
     .maybeSingle();
@@ -28,29 +30,65 @@ export default async function AlertDetailPage({
         {alert.events?.home_team} vs {alert.events?.away_team}
       </h1>
       <p>
-        <b>{alert.alert_type}</b> · score <b>{alert.alert_score}</b> ·{" "}
-        {alert.confidence_band.toUpperCase()} · {alert.market_key}
+        <span className={`pill ${alert.confidence_band}`}>
+          {alert.alert_score}/100 · {alert.confidence_band.toUpperCase()}
+        </span>{" "}
+        <b>{alert.alert_type}</b> · {alert.market_key} · status: {alert.status}
       </p>
       <p>{alert.reason_summary}</p>
 
-      {alert.llm_analyses && alert.llm_analyses.status === "ok" && (
-        <section style={{ border: "1px solid #2a2d34", borderRadius: 8, padding: 12, margin: "16px 0" }}>
-          <b>🤖 LLM (advisory)</b>: {alert.llm_analyses.classification} —{" "}
+      <AlertActions alertId={alert.id} status={alert.status} />
+
+      {alert.llm_analyses?.status === "ok" && (
+        <div className="banner info">
+          🤖 <b>LLM (advisory)</b>: {alert.llm_analyses.classification?.replace(/_/g, " ")} —{" "}
           {alert.llm_analyses.summary}
-        </section>
+        </div>
       )}
 
-      <h2>Evidence</h2>
-      <pre style={{ background: "#16181d", padding: 12, borderRadius: 8, overflow: "auto", fontSize: 12 }}>
-        {JSON.stringify(alert.alert_evidence?.payload, null, 2)}
-      </pre>
+      {alert.alert_evidence?.payload ? (
+        <EvidenceView payload={alert.alert_evidence.payload} />
+      ) : (
+        <p className="muted">No evidence payload stored.</p>
+      )}
 
       <h2>Deliveries</h2>
-      <ul>
-        {(alert.telegram_deliveries ?? []).map((d: { id: string; chat_id: string; status: string }) => (
-          <li key={d.id}>{d.chat_id} — {d.status}</li>
-        ))}
-      </ul>
+      {(alert.telegram_deliveries ?? []).length === 0 ? (
+        <p className="muted">No deliveries.</p>
+      ) : (
+        <table className="data">
+          <thead>
+            <tr><th>Chat</th><th>Status</th><th>Error</th></tr>
+          </thead>
+          <tbody>
+            {alert.telegram_deliveries.map(
+              (d: { id: string; chat_id: string; status: string; error: string | null }) => (
+                <tr key={d.id}>
+                  <td><code>{d.chat_id}</code></td>
+                  <td>{d.status}</td>
+                  <td className="muted">{d.error}</td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
+      )}
+
+      {(alert.alert_feedback ?? []).length > 0 && (
+        <>
+          <h2>Feedback</h2>
+          <ul>
+            {alert.alert_feedback.map(
+              (f: { verdict: string; note: string | null; created_at: string }, i: number) => (
+                <li key={i}>
+                  <b>{f.verdict}</b> {f.note && `— ${f.note}`}{" "}
+                  <span className="muted">({new Date(f.created_at).toLocaleString()})</span>
+                </li>
+              )
+            )}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
