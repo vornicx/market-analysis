@@ -387,7 +387,7 @@ General-football compact example shown above; WC alerts always carry the `🏆 W
 
 Position in pipeline: **after** alert insert, **before** Telegram send, with a 6-second budget — if it misses, the alert ships without annotation and `llm_analyses.status='skipped'`. Never gates, never scores, never suppresses.
 
-- Model: `claude-haiku-4-5` (cheap, fast). `max_tokens: 300`, `temperature: 0`.
+- Provider: **OpenCode Go** (OpenAI-compatible endpoint `https://opencode.ai/zen/go/v1/chat/completions`, Bearer auth). Default model `opencode-go/deepseek-v4-flash`, configurable via `LLM_MODEL`. `max_tokens: 300`, `temperature: 0`.
 - Input: a compacted evidence digest (NOT raw snapshots): ~400 tokens.
 
 ### Prompt (exact)

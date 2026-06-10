@@ -54,8 +54,9 @@ Telegram + dashboard.
   thresholds — 46 unit tests, no network needed (`services/worker`: `pytest -q`).
 - **Anti-spam**: dedupe keys, suppression windows, per-event daily cap,
   per-cycle cap, band-upgrade escalation (the only suppression bypass).
-- **Optional LLM annotation** (Claude Haiku, strict JSON schema, 6s timeout,
-  never blocks delivery) behind `llm_enabled` + `llm_min_band`.
+- **Optional LLM annotation** via OpenCode Go (OpenAI-compatible API, model
+  configurable through `LLM_MODEL`, strict JSON schema, 6s timeout, never
+  blocks delivery) behind `llm_enabled` + `llm_min_band`.
 - **Zero-credit replay**: queue a re-run of detectors over stored snapshots
   from any alert page to tune thresholds.
 - **Ops**: budget governor with daily Telegram notice, worker heartbeat,

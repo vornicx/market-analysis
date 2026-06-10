@@ -12,7 +12,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-llm = ["anthropic>=0.34"]
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [tool.ruff]

@@ -1,14 +1,19 @@
-"""Optional LLM annotation layer. NEVER a detector, NEVER blocks delivery.
+"""Optional LLM annotation layer via OpenCode Go (OpenAI-compatible API).
 
-Annotates alerts at/above llm_min_band with a classification + short summary.
-Any failure (missing key, timeout, invalid JSON) degrades to status
-'failed'/'skipped' and the alert ships without annotation.
+NEVER a detector, NEVER blocks delivery. Annotates alerts at/above llm_min_band
+with a classification + short summary. Any failure (missing key, timeout,
+invalid JSON) degrades to status 'failed'/'skipped' and the alert ships
+without annotation.
+
+Endpoint: https://opencode.ai/zen/go/v1/chat/completions (Bearer auth).
+Model is configurable via LLM_MODEL (default: a fast/cheap flash-class model).
 """
 from __future__ import annotations
 
 import json
 import logging
 
+import httpx
 from jsonschema import validate as js_validate
 from supabase import Client
 
@@ -17,7 +22,6 @@ from .settings import settings
 
 log = logging.getLogger(__name__)
 
-MODEL = "claude-haiku-4-5"
 TIMEOUT_SECONDS = 6
 BAND_ORDER = {"low": 0, "medium": 1, "high": 2}
 
@@ -30,7 +34,7 @@ SYSTEM_PROMPT = (
     '{"classification": one of [possible_sharp_move, possible_market_correction, '
     "possible_news_driven_move, possible_noise, needs_human_review], "
     '"summary": string <= 280 chars, "confidence": low|medium|high, '
-    '"caveats": array of <= 3 short strings}'
+    '"caveats": array of <= 3 short strings}. No markdown, no code fences.'
 )
 
 OUTPUT_SCHEMA = {
@@ -75,6 +79,41 @@ def _digest(ctx: FeatureCtx, scored: ScoredAnomaly) -> str:
     )
 
 
+def parse_response(text: str) -> dict:
+    """Strip optional code fences, parse and validate against OUTPUT_SCHEMA.
+    Raises on any deviation — callers degrade to status='failed'."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`").removeprefix("json").strip()
+    payload = json.loads(cleaned)
+    js_validate(payload, OUTPUT_SCHEMA)
+    return payload
+
+
+def _call_opencode(prompt: str) -> tuple[dict, int, int]:
+    """Returns (validated payload, tokens_in, tokens_out)."""
+    resp = httpx.post(
+        f"{settings.opencode_base_url.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {settings.opencode_api_key}"},
+        json={
+            "model": settings.llm_model,
+            "max_tokens": 300,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        },
+        timeout=TIMEOUT_SECONDS,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    text = body["choices"][0]["message"]["content"]
+    usage = body.get("usage", {})
+    payload = parse_response(text)
+    return payload, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+
+
 def annotate(
     db: Client,
     config: GlobalConfig,
@@ -85,34 +124,12 @@ def annotate(
     if BAND_ORDER[scored.band] < BAND_ORDER.get(config.llm_min_band, 1):
         _record(db, alert_id, status="skipped")
         return
-    if not settings.anthropic_api_key:
+    if not settings.opencode_api_key:
         _record(db, alert_id, status="skipped")
         return
 
     try:
-        import anthropic
-    except ImportError:
-        log.warning("anthropic package not installed — pip install '.[llm]'")
-        _record(db, alert_id, status="skipped")
-        return
-
-    try:
-        client = anthropic.Anthropic(
-            api_key=settings.anthropic_api_key, timeout=TIMEOUT_SECONDS
-        )
-        prompt = _digest(ctx, scored)
-        msg = client.messages.create(
-            model=MODEL,
-            max_tokens=300,
-            temperature=0,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = msg.content[0].text.strip()
-        if text.startswith("```"):
-            text = text.strip("`").removeprefix("json").strip()
-        payload = json.loads(text)
-        js_validate(payload, OUTPUT_SCHEMA)
+        payload, tokens_in, tokens_out = _call_opencode(_digest(ctx, scored))
         _record(
             db,
             alert_id,
@@ -121,8 +138,8 @@ def annotate(
             summary=payload["summary"],
             confidence=payload["confidence"],
             raw=payload,
-            tokens_in=msg.usage.input_tokens,
-            tokens_out=msg.usage.output_tokens,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
         )
     except Exception as exc:
         log.warning("LLM annotation failed for alert %s: %s", alert_id, exc)
@@ -132,7 +149,7 @@ def annotate(
 def _record(db: Client, alert_id: str, status: str, **fields: object) -> None:
     try:
         db.table("llm_analyses").upsert(
-            {"alert_id": alert_id, "status": status, "model": MODEL, **fields},
+            {"alert_id": alert_id, "status": status, "model": settings.llm_model, **fields},
             on_conflict="alert_id",
         ).execute()
     except Exception:
