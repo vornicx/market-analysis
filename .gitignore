@@ -8,6 +8,8 @@ __pycache__/
 .next/
 dist/
 out/
+*.egg-info/
+*.tsbuildinfo
 
 # env — never commit secrets
 .env
