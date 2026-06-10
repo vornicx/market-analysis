@@ -134,12 +134,12 @@ create table public.feature_windows (
   id uuid primary key default gen_random_uuid(),
   selection_id uuid not null references public.selections(id) on delete cascade,
   bookmaker_key text references public.bookmakers(bookmaker_key), -- null = consensus
-  window text not null check (window in ('poll', '1h', '6h', '24h')),
+  window_key text not null check (window_key in ('poll', '1h', '6h', '24h')),
   dp numeric,
   z numeric,
   pctile numeric,
   computed_at timestamptz not null default now(),
-  unique nulls not distinct (selection_id, bookmaker_key, window)
+  unique nulls not distinct (selection_id, bookmaker_key, window_key)
 );
 
 -- ── alerts ────────────────────────────────────────────────────────────────
