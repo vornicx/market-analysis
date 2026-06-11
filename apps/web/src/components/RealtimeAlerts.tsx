@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
-/** Subscribes to new alerts via Supabase Realtime and refreshes the page data. */
 export function RealtimeAlerts() {
   const router = useRouter();
   const [incoming, setIncoming] = useState(0);
@@ -32,7 +31,7 @@ export function RealtimeAlerts() {
 
   if (incoming === 0) return null;
   return (
-    <div className="banner info">
+    <div className="banner info" style={{ marginBottom: 0 }}>
       🔔 {incoming} new alert{incoming > 1 ? "s" : ""} arrived live
     </div>
   );

@@ -1,4 +1,4 @@
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { AlertActions } from "@/components/AlertActions";
 import { EvidenceView } from "@/components/EvidenceView";
@@ -11,7 +11,7 @@ export default async function AlertDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabaseAdmin();
 
   const { data: alert } = await supabase
     .from("alerts")

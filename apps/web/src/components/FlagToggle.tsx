@@ -8,11 +8,13 @@ export function FlagToggle({
   label,
   initial,
   warning,
+  hint,
 }: {
   flag: ToggleableFlag;
   label: string;
   initial: boolean;
   warning?: string;
+  hint?: string;
 }) {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -36,14 +38,17 @@ export function FlagToggle({
   }
 
   return (
-    <div style={{ margin: "12px 0" }}>
-      <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+    <div className="toggle-wrap">
+      <div style={{ flex: 1 }}>
+        <div className="toggle-label">{label}</div>
+        {hint && <div className="toggle-hint">{hint}</div>}
+        {warning && value && <div className="toggle-hint" style={{ color: "var(--warn)" }}>{warning}</div>}
+        {error && <div className="toggle-hint" style={{ color: "var(--danger)" }}>{error}</div>}
+      </div>
+      <label className="toggle">
         <input type="checkbox" checked={value} disabled={busy} onChange={toggle} />
-        <span>{label}</span>
-        <code style={{ color: "#888" }}>{flag}</code>
+        <span className="slider" />
       </label>
-      {value && warning && <p style={{ color: "#ffc66d", margin: "4px 0 0 24px" }}>{warning}</p>}
-      {error && <p style={{ color: "#ff7b7b", margin: "4px 0 0 24px" }}>{error}</p>}
     </div>
   );
 }

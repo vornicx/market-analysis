@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("vornicx@gmail.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,22 +27,42 @@ export default function LoginPage() {
   }
 
   return (
-    <form onSubmit={signIn} style={{ maxWidth: 320, margin: "10vh auto" }}>
-      <h1>Sign in</h1>
-      <input
-        type="email" placeholder="email" value={email} required
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ display: "block", width: "100%", marginBottom: 8, padding: 8 }}
-      />
-      <input
-        type="password" placeholder="password" value={password} required
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ display: "block", width: "100%", marginBottom: 8, padding: 8 }}
-      />
-      <button disabled={busy} style={{ padding: "8px 16px" }}>
-        {busy ? "Signing in…" : "Sign in"}
-      </button>
-      {error && <p style={{ color: "#ff7b7b" }}>{error}</p>}
-    </form>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "80vh" }}>
+      <form onSubmit={signIn} style={{ width: "100%", maxWidth: 360 }}>
+        <div className="card" style={{ padding: 32 }}>
+          <h1 style={{ marginBottom: 24, textAlign: "center" }}>Sign In</h1>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="muted text-sm" style={{ display: "block", marginBottom: 6 }}>Email</label>
+            <input
+              type="email" value={email} required
+              onChange={(e) => setEmail(e.target.value)}
+              className="field"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "10px 12px", width: "100%", fontSize: 14, outline: "none" }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label className="muted text-sm" style={{ display: "block", marginBottom: 6 }}>Password</label>
+            <input
+              type="password" placeholder="Enter your password" value={password} required
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "10px 12px", width: "100%", fontSize: 14, outline: "none" }}
+              autoFocus
+            />
+          </div>
+
+          {error && <div className="banner danger" style={{ marginBottom: 16 }}>{error}</div>}
+
+          <button
+            disabled={busy}
+            className="btn primary"
+            style={{ width: "100%", justifyContent: "center", padding: "10px 16px", fontSize: 14 }}
+          >
+            {busy ? "Signing in..." : "Sign In"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
